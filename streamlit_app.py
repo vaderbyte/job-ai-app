@@ -29,10 +29,14 @@ if st.button("Analyze"):
 
             response.raise_for_status()
             result = response.json()
-            score = result.get("semantic_score", result.get("similarity_score"))
+            semantic = result.get("semantic_score")
+            keyword = result.get("keyword_score")
+            final = result.get("final_score")
 
             st.subheader("Result")
-            st.success(f"Semantic Score: {score}%")
+            st.success(f"Final Score: {final}%")
+            st.write(f"Semantic Score: {semantic}%")
+            st.write(f"Keyword Score: {keyword}%")
         except requests.exceptions.ConnectionError:
             st.error("Could not connect to the FastAPI app. Make sure it is running on http://127.0.0.1:8000.")
         except requests.exceptions.RequestException as error:

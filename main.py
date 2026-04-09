@@ -34,14 +34,30 @@ def analyze(data: InputData):
     if not resume or not job:
         return {"error": "Missing input"}
 
-    clean_resume = " ".join(clean_text(resume))
-    clean_job = " ".join(clean_text(job))
+    # ---------- KEYWORD SCORE ----------
+    resume_words = clean_text(resume)
+    job_words = clean_text(job)
+
+    matched = resume_words.intersection(job_words)
+
+    keyword_score = round((len(matched) / len(job_words)) * 100, 2) if job_words else 0
+
+    # ---------- SEMANTIC SCORE ----------
+    clean_resume = " ".join(resume_words)
+    clean_job = " ".join(job_words)
 
     resume_embedding = model.encode([clean_resume])
     job_embedding = model.encode([clean_job])
 
     similarity = cosine_similarity(resume_embedding, job_embedding)[0][0]
+    semantic_score = round(float(similarity) * 100, 2)
+
+    # ---------- FINAL SCORE ----------
+    final_score = round((0.5 * keyword_score) + (0.5 * semantic_score), 2)
 
     return {
-        "semantic_score": round(float(similarity) * 100, 2)
+        "semantic_score": semantic_score,
+        "keyword_score": keyword_score,
+        "final_score": final_score,
+        "matched_keywords": list(matched)
     }
