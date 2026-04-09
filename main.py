@@ -21,10 +21,20 @@ def clean_text(text):
     words = text.split()
 
     stopwords = {
-        "the", "and", "is", "in", "to", "of", "for", "on", "with", "a", "an"
+        "the","and","is","in","to","of","for","on","with","a","an",
+        "about","what","will","our","you","your","we","are","as",
+        "by","be","this","that","or","from","at","it","into","across",
+        "using","use","used","based","within","through","over",
+        "include","including","required","preferred"
     }
 
-    return set(word for word in words if word not in stopwords)
+    # 🔥 NEW: filter short + useless words
+    clean_words = [
+        word for word in words
+        if word not in stopwords and len(word) > 3
+    ]
+
+    return set(clean_words)
 
 @app.post("/analyze")
 def analyze(data: InputData):
@@ -59,5 +69,6 @@ def analyze(data: InputData):
         "semantic_score": semantic_score,
         "keyword_score": keyword_score,
         "final_score": final_score,
-        "matched_keywords": list(matched)
+        "matched_keywords": list(matched),
+        "missing_keywords": list(job_words - resume_words)
     }

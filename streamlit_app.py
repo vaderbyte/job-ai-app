@@ -42,7 +42,7 @@ if st.button("Analyze"):
                     "resume": resume_text,
                     "job": job_description,
                 },
-                timeout=10,
+                timeout=60,
             )
 
             response.raise_for_status()
@@ -51,6 +51,8 @@ if st.button("Analyze"):
             semantic = result.get("semantic_score")
             keyword = result.get("keyword_score")
             final = result.get("final_score")
+            missing = result.get("missing_keywords", [])
+            matched = result.get("matched_keywords", [])
 
             # ---------- OUTPUT ----------
             st.subheader("Result")
@@ -59,6 +61,16 @@ if st.button("Analyze"):
             col1, col2 = st.columns(2)
             col1.metric("Semantic Score", f"{semantic}%")
             col2.metric("Keyword Score", f"{keyword}%")
+
+            st.subheader("Skill Analysis")
+
+            if matched:
+                st.write("✅ Matched Skills:", ", ".join(matched))
+
+            if missing:
+                st.write("❌ Missing Skills:", ", ".join(missing))
+                st.warning("Consider adding these skills to improve your ATS score.")
+
 
         except requests.exceptions.ConnectionError:
             st.error("Could not connect to the FastAPI app. Make sure it is running on http://127.0.0.1:8000.")
