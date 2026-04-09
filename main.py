@@ -1,4 +1,5 @@
 import re
+from pydantic import BaseModel
 from fastapi import FastAPI
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -6,13 +7,17 @@ from sklearn.metrics.pairwise import cosine_similarity
 app = FastAPI()
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+class InputData(BaseModel):
+    resume: str
+    job: str
+
 @app.get("/")
 def read_root():
     return {"message": "Hello ATS App 🚀"}
 
 def clean_text(text):
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)  # remove punctuation
+    text = re.sub(r'[^\w\s]', '', text)
     words = text.split()
 
     stopwords = {
@@ -21,9 +26,11 @@ def clean_text(text):
 
     return set(word for word in words if word not in stopwords)
 
+@app.post("/analyze")
+def analyze(data: InputData):
+    resume = data.resume
+    job = data.job
 
-@app.get("/analyze")
-def analyze(resume: str, job: str):
     if not resume or not job:
         return {"error": "Missing input"}
 

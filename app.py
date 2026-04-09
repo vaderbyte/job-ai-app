@@ -53,5 +53,6 @@ def analyze_resume(data: AnalyzeRequest):
 
     return {
         "similarity_score": score,
+        "semantic_score": score,
         "message": "Higher scores mean the resume shares more words with the job description.",
     }
