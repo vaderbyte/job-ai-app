@@ -11,13 +11,18 @@ def analyze(resume: str, job: str):
     resume_words = set(resume.lower().split())
     job_words = set(job.lower().split())
 
-    matched = resume_words & job_words
-    missing = job_words - resume_words
+    if not job_words:
+        return {"error": "Job description is empty"}
 
-    score = int((len(matched) / len(job_words)) * 100) if job_words else 0
+    matched = resume_words.intersection(job_words)
+    missing = job_words.difference(resume_words)
+
+    score = round((len(matched) / len(job_words)) * 100, 2)
 
     return {
         "match_score": score,
+        "matched_count": len(matched),
+        "total_keywords": len(job_words),
         "matched_keywords": list(matched),
         "missing_keywords": list(missing)
     }
