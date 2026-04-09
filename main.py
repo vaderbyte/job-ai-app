@@ -1,28 +1,40 @@
+import re
 from fastapi import FastAPI
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI()
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 @app.get("/")
 def read_root():
     return {"message": "Hello ATS App 🚀"}
 
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)  # remove punctuation
+    words = text.split()
+
+    stopwords = {
+        "the", "and", "is", "in", "to", "of", "for", "on", "with", "a", "an"
+    }
+
+    return set(word for word in words if word not in stopwords)
+
+
 @app.get("/analyze")
 def analyze(resume: str, job: str):
-    resume_words = set(resume.lower().split())
-    job_words = set(job.lower().split())
+    if not resume or not job:
+        return {"error": "Missing input"}
 
-    if not job_words:
-        return {"error": "Job description is empty"}
+    clean_resume = " ".join(clean_text(resume))
+    clean_job = " ".join(clean_text(job))
 
-    matched = resume_words.intersection(job_words)
-    missing = job_words.difference(resume_words)
+    resume_embedding = model.encode([clean_resume])
+    job_embedding = model.encode([clean_job])
 
-    score = round((len(matched) / len(job_words)) * 100, 2)
+    similarity = cosine_similarity(resume_embedding, job_embedding)[0][0]
 
     return {
-        "match_score": score,
-        "matched_count": len(matched),
-        "total_keywords": len(job_words),
-        "matched_keywords": list(matched),
-        "missing_keywords": list(missing)
+        "semantic_score": round(float(similarity) * 100, 2)
     }
