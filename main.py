@@ -1,74 +1,124 @@
-import re
-from pydantic import BaseModel
+import os
+import json
+from typing import Dict
 from fastapi import FastAPI
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer, util
+from openrouter import OpenRouter
+from dotenv import load_dotenv
+
+# ----------------------
+# LOAD ENV
+# ----------------------
+load_dotenv()
 
 app = FastAPI()
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
-class InputData(BaseModel):
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# ✅ SAFE API KEY LOADING
+api_key = os.getenv("OPENROUTER_API_KEY")
+
+if not api_key:
+    raise ValueError("❌ OPENROUTER_API_KEY not found in environment variables")
+
+client = OpenRouter(api_key=api_key)
+
+
+class ATSRequest(BaseModel):
     resume: str
     job: str
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello ATS App 🚀"}
 
-def clean_text(text):
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    words = text.split()
+# ----------------------
+# SEMANTIC SCORE
+# ----------------------
+def semantic_score(resume: str, jd: str) -> float:
+    emb1 = model.encode(resume, convert_to_tensor=True)
+    emb2 = model.encode(jd, convert_to_tensor=True)
+    score = util.cos_sim(emb1, emb2).item()
+    return round(score * 100, 2)
 
-    stopwords = {
-        "the","and","is","in","to","of","for","on","with","a","an",
-        "about","what","will","our","you","your","we","are","as",
-        "by","be","this","that","or","from","at","it","into","across",
-        "using","use","used","based","within","through","over",
-        "include","including","required","preferred"
-    }
 
-    # 🔥 NEW: filter short + useless words
-    clean_words = [
-        word for word in words
-        if word not in stopwords and len(word) > 3
-    ]
+# ----------------------
+# LLM ANALYSIS
+# ----------------------
+def llm_analysis(resume: str, jd: str) -> Dict:
+    prompt = f"""
+You are an ATS evaluator.
 
-    return set(clean_words)
+Evaluate the resume against the job description.
 
+Return STRICT JSON:
+- strengths
+- gaps
+- improvement_points
+- keyword_score (0-100)
+
+Rules:
+- No generic words
+- Focus on capabilities
+- Be concise
+
+Resume:
+{resume}
+
+Job Description:
+{jd}
+"""
+
+    try:
+        response = client.chat.send(
+            model="openai/gpt-oss-120b:free",
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        content = response.choices[0].message.content
+        data = json.loads(content)
+
+    except Exception as e:
+        print("LLM ERROR:", e)
+        data = {
+            "strengths": [],
+            "gaps": [],
+            "improvement_points": [],
+            "keyword_score": 0
+        }
+
+    return data
+
+
+# ----------------------
+# FINAL SCORE
+# ----------------------
+def final_score(semantic: float, keyword: float) -> float:
+    return round((0.6 * semantic) + (0.4 * keyword), 2)
+
+
+# ----------------------
+# MAIN API
+# ----------------------
 @app.post("/analyze")
-def analyze(data: InputData):
+def analyze(data: ATSRequest):
     resume = data.resume
-    job = data.job
+    jd = data.job
 
-    if not resume or not job:
-        return {"error": "Missing input"}
+    sem = semantic_score(resume, jd)
+    llm_data = llm_analysis(resume, jd)
 
-    # ---------- KEYWORD SCORE ----------
-    resume_words = clean_text(resume)
-    job_words = clean_text(job)
-
-    matched = resume_words.intersection(job_words)
-
-    keyword_score = round((len(matched) / len(job_words)) * 100, 2) if job_words else 0
-
-    # ---------- SEMANTIC SCORE ----------
-    clean_resume = " ".join(resume_words)
-    clean_job = " ".join(job_words)
-
-    resume_embedding = model.encode([clean_resume])
-    job_embedding = model.encode([clean_job])
-
-    similarity = cosine_similarity(resume_embedding, job_embedding)[0][0]
-    semantic_score = round(float(similarity) * 100, 2)
-
-    # ---------- FINAL SCORE ----------
-    final_score = round((0.5 * keyword_score) + (0.5 * semantic_score), 2)
+    keyword = llm_data.get("keyword_score", 0)
+    final = final_score(sem, keyword)
 
     return {
-        "semantic_score": semantic_score,
-        "keyword_score": keyword_score,
-        "final_score": final_score,
-        "matched_keywords": list(matched),
-        "missing_keywords": list(job_words - resume_words)
+        "final_score": final,
+        "semantic_score": sem,
+        "keyword_score": keyword,
+        "strengths": llm_data.get("strengths", []),
+        "gaps": llm_data.get("gaps", []),
+        "improvement_points": llm_data.get("improvement_points", [])
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

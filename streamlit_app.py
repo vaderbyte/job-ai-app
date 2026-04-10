@@ -4,9 +4,9 @@ import fitz  # PyMuPDF
 
 API_URL = "http://127.0.0.1:8000/analyze"
 
-st.set_page_config(page_title="ATS Resume Analyzer")
-st.title("ATS Resume Analyzer")
-st.write("Upload a resume or paste text, then add a job description and click Analyze.")
+st.set_page_config(page_title="ATS Resume Analyzer", layout="wide")
+st.title("📄 ATS Resume Analyzer")
+st.write("Upload your resume, paste a job description, and get intelligent ATS-style feedback.")
 
 # ---------- PDF TEXT EXTRACTION ----------
 def extract_text_from_pdf(uploaded_file):
@@ -16,63 +16,96 @@ def extract_text_from_pdf(uploaded_file):
             text += page.get_text()
     return text
 
-# ---------- INPUT ----------
-uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
+# ---------- INPUT LAYOUT ----------
+col1, col2 = st.columns(2)
 
-resume_text = ""
+with col1:
+    st.subheader("📎 Resume Input")
+    uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
 
-if uploaded_file is not None:
-    resume_text = extract_text_from_pdf(uploaded_file)
-    st.success("Resume uploaded successfully!")
-    st.write(f"Extracted characters: {len(resume_text)}")
-else:
-    resume_text = st.text_area("Or paste Resume", height=220)
+    resume_text = ""
 
-job_description = st.text_area("Job Description", height=220)
+    if uploaded_file is not None:
+        resume_text = extract_text_from_pdf(uploaded_file)
+        st.success("Resume uploaded successfully!")
+        st.caption(f"Extracted characters: {len(resume_text)}")
+    else:
+        resume_text = st.text_area("Or paste Resume", height=300)
+
+with col2:
+    st.subheader("🧾 Job Description")
+    job_description = st.text_area("Paste Job Description", height=300)
 
 # ---------- ANALYZE BUTTON ----------
-if st.button("Analyze"):
+st.markdown("---")
+
+if st.button("🚀 Analyze Resume"):
     if not resume_text.strip() or not job_description.strip():
-        st.warning("Please fill in both fields.")
+        st.warning("Please provide both resume and job description.")
     else:
-        try:
-            response = requests.post(
-                API_URL,
-                json={
-                    "resume": resume_text,
-                    "job": job_description,
-                },
-                timeout=60,
-            )
+        with st.spinner("Analyzing with AI..."):
+            try:
+                response = requests.post(
+                    API_URL,
+                    json={
+                        "resume": resume_text,
+                        "job": job_description,
+                    },
+                    timeout=60,
+                )
 
-            response.raise_for_status()
-            result = response.json()
+                response.raise_for_status()
+                result = response.json()
 
-            semantic = result.get("semantic_score")
-            keyword = result.get("keyword_score")
-            final = result.get("final_score")
-            missing = result.get("missing_keywords", [])
-            matched = result.get("matched_keywords", [])
+                semantic = result.get("semantic_score", 0)
+                keyword = result.get("keyword_score", 0)
+                final = result.get("final_score", 0)
 
-            # ---------- OUTPUT ----------
-            st.subheader("Result")
-            st.success(f"Final Score: {final}%")
+                strengths = result.get("strengths", [])
+                gaps = result.get("gaps", [])
+                improvements = result.get("improvement_points", [])
 
-            col1, col2 = st.columns(2)
-            col1.metric("Semantic Score", f"{semantic}%")
-            col2.metric("Keyword Score", f"{keyword}%")
+                # ---------- OUTPUT ----------
+                st.markdown("## 📊 Results")
 
-            st.subheader("Skill Analysis")
+                st.progress(int(final))
+                st.success(f"Final ATS Score: {final}%")
 
-            if matched:
-                st.write("✅ Matched Skills:", ", ".join(matched))
+                col1, col2, col3 = st.columns(3)
+                col1.metric("🧠 Semantic Match", f"{semantic}%")
+                col2.metric("🤖 AI Match Score", f"{keyword}%")
+                col3.metric("⭐ Overall Score", f"{final}%")
 
-            if missing:
-                st.write("❌ Missing Skills:", ", ".join(missing))
-                st.warning("Consider adding these skills to improve your ATS score.")
+                st.markdown("---")
 
+                # ---------- INSIGHTS ----------
+                col1, col2 = st.columns(2)
 
-        except requests.exceptions.ConnectionError:
-            st.error("Could not connect to the FastAPI app. Make sure it is running on http://127.0.0.1:8000.")
-        except requests.exceptions.RequestException as error:
-            st.error(f"API request failed: {error}")
+                with col1:
+                    st.subheader("🟢 Strengths")
+                    if strengths:
+                        for s in strengths:
+                            st.markdown(f"- {s}")
+                    else:
+                        st.info("No strong strengths identified.")
+
+                with col2:
+                    st.subheader("🔴 Gaps")
+                    if gaps:
+                        for g in gaps:
+                            st.markdown(f"- {g}")
+                    else:
+                        st.success("No major gaps detected.")
+
+                # ---------- IMPROVEMENTS ----------
+                if improvements:
+                    st.markdown("---")
+                    st.subheader("💡 How to Improve Your Resume")
+
+                    for imp in improvements:
+                        st.markdown(f"👉 {imp}")
+
+            except requests.exceptions.ConnectionError:
+                st.error("❌ Could not connect to backend. Ensure FastAPI is running.")
+            except requests.exceptions.RequestException as error:
+                st.error(f"API request failed: {error}")
